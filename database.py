@@ -1,52 +1,71 @@
-import logging
-from aiogram import Bot, Dispatcher, types
-from aiogram.types import ParseMode
-import asyncio
-from config import TOKEN
-from utils import download_instagram_content
-from database import create_table, save_user
+import sqlite3
+from datetime import datetime
 
-# Loglarni sozlash
-logging.basicConfig(level=logging.INFO)
-
-# Bot va Dispatcher yaratish
-bot = Bot(token=TOKEN)
-dp = Dispatcher(bot)
+# Ma'lumotlar bazasini yaratish va ulanish
+def create_connection():
+    conn = sqlite3.connect('bot_stats.db')
+    return conn
 
 # Jadval yaratish
-create_table()
+def create_table():
+    conn = create_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY,
+            username TEXT,
+            used_at TIMESTAMP
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS requests (
+            request_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            request_time TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (user_id)
+        )
+    ''')
+    conn.commit()
+    conn.close()
 
-# Start buyrug'i
-@dp.message_handler(commands=['start'])
-async def send_welcome(message: types.Message):
-    await message.answer("Salom! Instagramdan rasm yoki video yuklab olish uchun Instagram postining URL manzilini yuboring.")
+# Foydalanuvchini saqlash funksiyasi
+def save_user(user_id, username):
+    conn = create_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT OR IGNORE INTO users (user_id, username, used_at)
+        VALUES (?, ?, ?)
+    ''', (user_id, username, datetime.now()))
+    conn.commit()
+    conn.close()
 
-# Instagram URL'larini qayta ishlash
-@dp.message_handler()
-async def download_instagram_post(message: types.Message):
-    post_url = message.text
-    logging.info(f"Foydalanuvchi {message.from_user.username} ({message.from_user.id}) quyidagi URL manzilni yubordi: {post_url}")
+# Foydalanuvchini so'rovlar bilan saqlash
+def save_request(user_id):
+    conn = create_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO requests (user_id, request_time)
+        VALUES (?, ?)
+    ''', (user_id, datetime.now()))
+    conn.commit()
+    conn.close()
 
-    # Foydalanuvchini bazaga qo'shish
-    save_user(message.from_user.id, message.from_user.username)
+# Statistikani olish
+def get_statistics(period):
+    conn = create_connection()
+    cursor = conn.cursor()
 
-    # Instagramdan rasm yoki video yuklab olish
-    result = download_instagram_content(post_url)
+    if period == 'week':
+        cursor.execute('''
+            SELECT COUNT(DISTINCT user_id) FROM requests WHERE request_time > datetime('now', '-7 days')
+        ''')
+    elif period == 'month':
+        cursor.execute('''
+            SELECT COUNT(DISTINCT user_id) FROM requests WHERE request_time > datetime('now', '-30 days')
+        ''')
+    else:  # Umumiy so'rovlar soni
+        cursor.execute('SELECT COUNT(*) FROM requests')
 
-    # Agar yuklab olish muvaffaqiyatli bo'lsa
-    if result:
-        # Yuklangan faylni jo'natish
-        with open(result, 'rb') as file:
-            if result.endswith(('.mp4', '.avi', '.mov')):
-                await message.answer_video(file)
-            else:
-                await message.answer_photo(file)
-    else:
-        await message.answer("Instagram postining URL manzili noto'g'ri yoki kontentni yuklab bo'lmadi. Iltimos, qayta urinib ko'ring.")
-
-# Botni ishga tushirish
-async def main():
-    await dp.start_polling()
-
-if __name__ == '__main__':
-    asyncio.run(main())
+    count = cursor.fetchone()[0]
+    conn.close()
+    return count

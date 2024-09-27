@@ -1,4 +1,5 @@
-aiogram==2.25.1  # Telegram bot uchun
-Flask==2.1.2  # Veb sayt yaratish uchun
-beautifulsoup4==4.10.0  # HTML tahlil qilish uchun (Instagram postini tahlil qilishda)
-requests==2.26.0  # HTTP so'rovlar uchun (Instagramdan rasm va video yuklash uchun)
+aiogram==2.25.1
+Flask==2.1.2
+instaloader==4.9.5
+requests==2.26.0
+python-dotenv==0.19.2  # .env fayllaridan tokenlarni olish uchun
