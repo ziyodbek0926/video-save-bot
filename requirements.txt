@@ -2,4 +2,4 @@ aiogram==2.25.1
 Flask==2.1.2
 instaloader==4.9.5
 requests==2.26.0
-python-dotenv==0.19.2  # .env fayllaridan tokenlarni olish uchun
+python-dotenv==0.19.2
