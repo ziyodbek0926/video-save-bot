@@ -1,51 +1,82 @@
-import logging
-from aiogram import Bot, Dispatcher, types
 import asyncio
+import logging
+import os
+from aiogram import Bot, Dispatcher, types
+from aiogram.utils.exceptions import Throttled
 from config import TOKEN
 from utils import download_instagram_content
-import os
+from database import save_user, remove_user_data
 
 # Loglarni sozlash
 logging.basicConfig(level=logging.INFO)
 
-# Bot va Dispatcher yaratish
+# Bot va dispatcher yaratish
 bot = Bot(token=TOKEN)
 dp = Dispatcher(bot)
 
-# Start buyrug'i
+# Cheklov parametrlari (soniyalar)
+RATE_LIMIT = 15  # Foydalanuvchining 15 soniyada 2 ta URL yuborishi mumkin
+user_timestamps = {}  # Foydalanuvchilar vaqtini kuzatish uchun
+
+# /start buyrug'iga javob
 @dp.message_handler(commands=['start'])
 async def send_welcome(message: types.Message):
-    await message.answer("Salom! Instagramdan rasm yoki video yuklab olish uchun Instagram postining URL manzilini yuboring.")
+    await message.answer("Salom! Instagram post manzilini yuboring, biz rasm yoki videoni yuklab beramiz.")
 
-# Instagram URL'larini qayta ishlash
+# Cheklovga tushganda foydalanuvchiga xabar berish
+@dp.throttled(rate=RATE_LIMIT, key="instagram_post")
+async def rate_limit_handler(message: types.Message, throttled: Throttled):
+    time_left = int(throttled.rate - throttled.delta)  # Qancha vaqt qoldi
+    await message.answer(f"Juda ko'p so'rov yubordingiz. Iltimos {time_left} soniya kuting.")
+
+# Instagram URL manzilini qabul qilish va uni yuklab berish
 @dp.message_handler()
 async def download_instagram_post(message: types.Message):
-    post_url = message.text
-    logging.info(f"Foydalanuvchi {message.from_user.username} ({message.from_user.id}) quyidagi URL manzilni yubordi: {post_url}")
+    user_id = message.from_user.id  # Foydalanuvchi ID si
+    username = message.from_user.username  # Foydalanuvchi nomi
+    post_url = message.text  # Foydalanuvchi yuborgan URL
 
-    # Instagramdan rasm yoki video URL'ni olish
-    result = download_instagram_content(post_url)
+    logging.info(f"Foydalanuvchi {username} ({user_id}) URL manzilini yubordi: {post_url}")
 
-    if result:
-        # Fayl turi bo'yicha tekshirish va jo'natish
-        if result.endswith('.mp4'):
-            # Video bo'lsa, videoni yuborish
-            await message.answer_video(types.InputFile(result))
-        elif result.endswith('.jpg'):
-            # Rasm bo'lsa, rasmni yuborish
-            await message.answer_photo(types.InputFile(result))
-        
-        # Foydalanuvchiga fayl jo'natilgandan keyin faylni o'chirish
-        os.remove(result)
+    # Cheklov: foydalanuvchi oxirgi marta so'rov yuborgan vaqti
+    if user_id in user_timestamps:
+        time_since_last = asyncio.get_event_loop().time() - user_timestamps[user_id]
+        if time_since_last < RATE_LIMIT:
+            time_left = int(RATE_LIMIT - time_since_last)
+            await message.answer(f"Iltimos {time_left} soniya kuting va keyinroq yana so'rov yuboring.")
+            return
 
-        # O'chirilgandan keyin katalogni o'chirish
-        try:
-            os.rmdir(os.path.dirname(result))  # Katalog bo'sh bo'lsa, o'chirish
-        except OSError:
-            pass  # Agar katalogda boshqa fayllar bo'lsa, o'chirilmaydi
+    # Foydalanuvchi vaqtini yangilash
+    user_timestamps[user_id] = asyncio.get_event_loop().time()
 
-    else:
-        await message.answer("Instagram postining URL manzili noto'g'ri yoki kontentni yuklab bo'lmadi. Iltimos, qayta urinib ko'ring.")
+    # Foydalanuvchi ma'lumotlarini bazaga saqlash
+    save_user(user_id, username)
+
+    # Instagramdan kontent yuklab olish
+    try:
+        content_dict = download_instagram_content(post_url)  # Kontent yuklash funksiyasi
+
+        if content_dict:
+            # Rasm va videolarni jo'natish
+            for video in content_dict.get('videos', []):
+                with open(video, 'rb') as vid_file:
+                    await message.answer_video(vid_file)
+                await asyncio.sleep(1)  # Har bir fayl jo'natilgandan keyin biroz kutish
+
+            for image in content_dict.get('images', []):
+                with open(image, 'rb') as img_file:
+                    await message.answer_photo(img_file)
+                await asyncio.sleep(1)  # Har bir fayl jo'natilgandan keyin biroz kutish
+
+        else:
+            await message.answer("Kontentni olishda xatolik yuz berdi. URL manzilini tekshiring.")
+
+    except Exception as e:
+        logging.error(f"Instagram kontentini yuklashda xato: {e}")
+        await message.answer("Instagram kontentini yuklashda xatolik yuz berdi.")
+
+    # Foydalanuvchi ma'lumotlarini fayl jo'natilgandan keyin o'chirish
+    remove_user_data(user_id)
 
 # Botni ishga tushirish
 async def main():
@@ -53,3 +84,4 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
+

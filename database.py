@@ -1,71 +1,50 @@
 import sqlite3
-from datetime import datetime
 
-# Ma'lumotlar bazasini yaratish va ulanish
-def create_connection():
-    conn = sqlite3.connect('bot_stats.db')
-    return conn
+# Connect to the database
+conn = sqlite3.connect('users.db')
+cursor = conn.cursor()
 
-# Jadval yaratish
-def create_table():
-    conn = create_connection()
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
-            username TEXT,
-            used_at TIMESTAMP
-        )
-    ''')
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS requests (
-            request_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            request_time TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (user_id)
-        )
-    ''')
-    conn.commit()
-    conn.close()
+# Create users table if it doesn't exist
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS users (
+        user_id INTEGER PRIMARY KEY,
+        username TEXT,
+        last_request_time TIMESTAMP
+    )
+''')
+conn.commit()
 
-# Foydalanuvchini saqlash funksiyasi
+# Save user information and update their last request time
 def save_user(user_id, username):
-    conn = create_connection()
-    cursor = conn.cursor()
     cursor.execute('''
-        INSERT OR IGNORE INTO users (user_id, username, used_at)
-        VALUES (?, ?, ?)
-    ''', (user_id, username, datetime.now()))
+        INSERT OR REPLACE INTO users (user_id, username, last_request_time)
+        VALUES (?, ?, CURRENT_TIMESTAMP)
+    ''', (user_id, username))
     conn.commit()
+
+# Get user by ID
+def get_user(user_id):
+    cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
+    return cursor.fetchone()
+
+# Count users who have made requests within a time range (e.g., last week, last month)
+def count_users_in_time_range(time_range):
+    cursor.execute(f'''
+        SELECT COUNT(DISTINCT user_id) FROM users
+        WHERE last_request_time >= datetime('now', '-{time_range}')
+    ''')
+    return cursor.fetchone()[0]
+
+# Count the total number of requests made in the system
+def count_total_requests():
+    cursor.execute('SELECT COUNT(*) FROM users')
+    return cursor.fetchone()[0]
+
+# Close the connection to the database
+def close_connection():
     conn.close()
 
-# Foydalanuvchini so'rovlar bilan saqlash
-def save_request(user_id):
-    conn = create_connection()
-    cursor = conn.cursor()
-    cursor.execute('''
-        INSERT INTO requests (user_id, request_time)
-        VALUES (?, ?)
-    ''', (user_id, datetime.now()))
+# Remove user data after sending the content
+def remove_user_data(user_id):
+    cursor.execute('DELETE FROM users WHERE user_id = ?', (user_id,))
     conn.commit()
-    conn.close()
-
-# Statistikani olish
-def get_statistics(period):
-    conn = create_connection()
-    cursor = conn.cursor()
-
-    if period == 'week':
-        cursor.execute('''
-            SELECT COUNT(DISTINCT user_id) FROM requests WHERE request_time > datetime('now', '-7 days')
-        ''')
-    elif period == 'month':
-        cursor.execute('''
-            SELECT COUNT(DISTINCT user_id) FROM requests WHERE request_time > datetime('now', '-30 days')
-        ''')
-    else:  # Umumiy so'rovlar soni
-        cursor.execute('SELECT COUNT(*) FROM requests')
-
-    count = cursor.fetchone()[0]
-    conn.close()
-    return count
