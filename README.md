@@ -1,19 +1,50 @@
 # video-save-bot
 
-### Qadamlar:
+YouTube, Instagram va Pinterest havolalaridan video/rasm yuklab beruvchi Telegram bot.
 
-1.Kutubxonalarni o‘rnatish: Terminalda quyidagi buyruq bilan kerakli kutubxonalarni o‘rnatish:
+## Talablar
 
-```bash 
+- Python 3.11+
+- [ffmpeg](https://ffmpeg.org/download.html) (video va audio oqimlarini birlashtirish uchun `yt-dlp`ga kerak) — PATH ga qo'shilgan bo'lishi kerak.
+
+## O'rnatish
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-2.Botni ishga tushirish: bot.py faylini ishga tushiring:
+`.env.example` faylidan nusxa oling va `BOT_TOKEN` qiymatini [@BotFather](https://t.me/BotFather) dan olingan token bilan to'ldiring:
 
 ```bash
-python bot.py
+copy .env.example .env
 ```
 
-Botga xabar yuborish: Instagram postining URL'ini botga yuboring va bot yuklangan rasm yoki videoni qaytaradi.
+## Ishga tushirish
 
-Bu bot foydalanuvchi kiritgan Instagram postining URL'sini qabul qiladi va rasm yoki videoni yuklab olib, uni foydalanuvchiga qaytaradi. Agar URL noto‘g‘ri bo‘lsa, foydalanuvchiga xato haqidagi xabar yuboriladi.
+Loyiha ildizidan modul sifatida ishga tushiring:
+
+```bash
+python -m bot.main
+```
+
+## Tuzilma
+
+```
+bot/
+├── core/
+│   ├── config.py     # pydantic-settings orqali .env ni o'qiydi
+│   └── loader.py     # Bot va Dispatcher instansiyalari
+├── handlers/
+│   └── media_handler.py  # /start va havola handlerlari
+├── services/
+│   └── downloader.py     # platforma aniqlash + yt-dlp integratsiyasi
+└── main.py            # kirish nuqtasi (polling)
+```
+
+## Cheklovlar
+
+- Fayl hajmi Telegram bot API limiti — 50MB (`.env` orqali `MAX_FILE_SIZE_MB` bilan sozlanadi) dan katta bo'lsa, yuborilmaydi.
+- Yopiq (private) profil yoki login talab qiladigan kontent yuklab bo'lmaydi.
+- Bir nechta media (carousel post)larda hozircha faqat birinchi element yuklanadi.
