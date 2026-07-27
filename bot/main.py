@@ -3,6 +3,7 @@ import logging
 
 from bot.core.loader import bot, dp
 from bot.handlers.media_handler import router as media_router
+from bot.services.downloader import FFMPEG_AVAILABLE
 
 
 async def main() -> None:
@@ -10,6 +11,13 @@ async def main() -> None:
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
+
+    if not FFMPEG_AVAILABLE:
+        logging.warning(
+            "ffmpeg topilmadi — video+audio birlashtirish o'chirilgan, "
+            "faqat tayyor (progressive) formatlar yuklanadi. "
+            "Sifatni oshirish uchun ffmpeg o'rnatib, PATH ga qo'shing."
+        )
 
     dp.include_router(media_router)
 

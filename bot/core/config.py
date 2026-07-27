@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -13,6 +14,9 @@ class Settings(BaseSettings):
     BOT_TOKEN: str
     DOWNLOADS_DIR: Path = Path("downloads")
     MAX_FILE_SIZE_MB: int = 50
+    # Optional: folder containing ffmpeg.exe/ffprobe.exe, for when ffmpeg
+    # isn't on PATH (e.g. just extracted, not installed system-wide).
+    FFMPEG_LOCATION: Optional[Path] = None
 
     @property
     def max_file_size_bytes(self) -> int:

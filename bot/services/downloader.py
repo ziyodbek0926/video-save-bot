@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import shutil
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -16,6 +17,24 @@ from bot.core.config import settings
 logger = logging.getLogger(__name__)
 
 IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
+
+
+def _resolve_ffmpeg_dir() -> Optional[Path]:
+    configured = settings.FFMPEG_LOCATION
+    if configured is not None:
+        candidate_dir = configured if configured.is_dir() else configured.parent
+        if (candidate_dir / "ffmpeg.exe").exists() or (candidate_dir / "ffmpeg").exists():
+            return candidate_dir
+        logger.warning(
+            "FFMPEG_LOCATION=%s belgilangan, lekin u yerda ffmpeg topilmadi.", configured
+        )
+
+    found = shutil.which("ffmpeg")
+    return Path(found).parent if found else None
+
+
+FFMPEG_DIR = _resolve_ffmpeg_dir()
+FFMPEG_AVAILABLE = FFMPEG_DIR is not None
 
 YOUTUBE_PATTERN = re.compile(
     r"(?:https?://)?(?:www\.)?(?:youtube\.com/(?:watch\?v=|shorts/|embed/)|youtu\.be/)[\w-]+",
@@ -82,6 +101,10 @@ def detect_platform(url: str) -> Optional[Platform]:
 
 def _format_selector() -> str:
     limit = f"{settings.MAX_FILE_SIZE_MB}M"
+
+    if not FFMPEG_AVAILABLE:
+        return f"best[ext=mp4][filesize<{limit}]/best[filesize<{limit}]/worst"
+
     return (
         f"bestvideo[ext=mp4][filesize<{limit}]+bestaudio[ext=m4a][filesize<{limit}]/"
         f"best[ext=mp4][filesize<{limit}]/"
@@ -134,7 +157,6 @@ def _download_sync(url: str, platform: Platform) -> DownloadResult:
     ydl_opts = {
         "outtmpl": outtmpl,
         "format": _format_selector(),
-        "merge_output_format": "mp4",
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
@@ -142,6 +164,10 @@ def _download_sync(url: str, platform: Platform) -> DownloadResult:
         "retries": 3,
         "socket_timeout": 20,
     }
+
+    if FFMPEG_AVAILABLE:
+        ydl_opts["merge_output_format"] = "mp4"
+        ydl_opts["ffmpeg_location"] = str(FFMPEG_DIR)
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
